@@ -1,7 +1,8 @@
 const express = require("express");
 const axios = require("axios");
-const cheerio = require("cheerio");
-const cors = require("cors"); // To enable CORS
+const { parse } = require("node-html-parser"); // Import node-html-parser
+const cors = require("cors");
+
 const app = express();
 
 // Enable CORS to allow requests from the frontend
@@ -13,21 +14,48 @@ app.get("/fetch-og", async (req, res) => {
   const { url } = req.query;
 
   try {
-    const response = await axios.get(url);
+    const formattedUrl =
+      url.startsWith("http://") || url.startsWith("https://")
+        ? url
+        : `https://${url}`;
+
+    const response = await axios.get(formattedUrl);
     const html = response.data;
-    const $ = cheerio.load(html);
+
+    // Parse the HTML using node-html-parser
+    const root = parse(html);
 
     // Extract Open Graph metadata (for Facebook, WhatsApp, LinkedIn, etc.)
-    const ogTitle = $('meta[property="og:title"]').attr("content") || $('meta[name="title"]').attr("content");
-    const ogDescription = $('meta[property="og:description"]').attr("content") || $('meta[name="description"]').attr("content");
-    const ogImage = $('meta[property="og:image"]').attr("content");
-    const ogUrl = $('meta[property="og:url"]').attr("content") || url;
+    const ogTitle =
+      root
+        .querySelector('meta[property="og:title"]')
+        ?.getAttribute("content") ||
+      root.querySelector('meta[name="title"]')?.getAttribute("content");
+    const ogDescription =
+      root
+        .querySelector('meta[property="og:description"]')
+        ?.getAttribute("content") ||
+      root.querySelector('meta[name="description"]')?.getAttribute("content");
+    const ogImage = root
+      .querySelector('meta[property="og:image"]')
+      ?.getAttribute("content");
+    const ogUrl =
+      root.querySelector('meta[property="og:url"]')?.getAttribute("content") ||
+      url;
 
     // Twitter card metadata
-    const twitterTitle = $('meta[name="twitter:title"]').attr("content");
-    const twitterDescription = $('meta[name="twitter:description"]').attr("content");
-    const twitterImage = $('meta[name="twitter:image"]').attr("content");
-    const twitterCard = $('meta[name="twitter:card"]').attr("content");
+    const twitterTitle = root
+      .querySelector('meta[name="twitter:title"]')
+      ?.getAttribute("content");
+    const twitterDescription = root
+      .querySelector('meta[name="twitter:description"]')
+      ?.getAttribute("content");
+    const twitterImage = root
+      .querySelector('meta[name="twitter:image"]')
+      ?.getAttribute("content");
+    const twitterCard = root
+      .querySelector('meta[name="twitter:card"]')
+      ?.getAttribute("content");
 
     // LinkedIn metadata (similar to Open Graph)
     const linkedinTitle = ogTitle;
@@ -52,7 +80,7 @@ app.get("/fetch-og", async (req, res) => {
         title: linkedinTitle,
         description: linkedinDescription,
         image: linkedinImage,
-      }
+      },
     });
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch metadata" });
